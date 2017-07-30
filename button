@@ -1,0 +1,211 @@
+monitors = {peripheral.find("monitor")}
+local allMon = {}
+for funcName,_ in pairs(monitors[1]) do
+	allMon[funcName] = function(...)
+		for i=1,#monitors-1 do monitors[i][funcName](unpack(arg)) end
+		return monitors[#monitors][funcName](unpack(arg))
+	end
+end
+
+local sides = {"left", "right", "front", "back", "bottom", "top"}
+local monitor = {}
+
+for a,b in pairs(sides) do
+	local monObject = peripheral.wrap(b)
+	if monObject then
+		monitor[b] = monObject
+	end
+end
+
+allMon.setTextScale(1)
+allMon.setTextColor(colors.white)
+allMon.setBackgroundColor(colors.black)
+
+local button={}
+
+function clearAll()
+   button = {}
+end
+
+function clearTable(name)
+	button[name] = {}
+end
+
+function getPlayer(name)
+	return button[name]["player"]
+end
+
+function setPlayer(name, player)
+	button[name]["player"] = player
+	screen()
+end
+
+function getState(name)
+	return button[name]["active"]
+end
+
+function setState(name, state)
+	button[name]["active"] = state
+	screen()
+end
+
+-- monSide: "left", "right", "front", "back", "bottom", "top"
+function setTable(name, func, param, xmin, xmax, ymin, ymax, monSide)
+	button[name] = {}
+	button[name]["func"] = func
+	button[name]["active"] = false
+	button[name]["player"] = "empty"
+	button[name]["param"] = param
+	button[name]["xmin"] = xmin
+	button[name]["ymin"] = ymin
+	button[name]["xmax"] = xmax
+	button[name]["ymax"] = ymax
+	if not monitor[monSide] then
+		print("There is no monitor on the "..monSide.." side! The button named \""..name.."\" won't be displayed.")
+		button[name]["mon"] = nil
+	else
+		button[name]["mon"] = monSide
+	end
+end
+
+-- returns true if there is a monitor connected at the given side
+function testForMonitor(monSide)
+	if not monSide then
+		return false
+	end
+	if not monitors[monSide] then
+		return false
+	end
+	return true
+end
+	
+
+function fill(text, color, bData)
+	if not testForMonitor(bData["mon"]) then
+		return
+	end
+	local display = monitors[bData["mon"]]
+	display.setBackgroundColor(color)
+	local on = bData["player"]
+	local xSize = bData["xmax"] - bData["xmin"]
+	local ySize = bData["ymax"] - bData["ymin"]
+	local sizeRel = xSize / ySize
+	for j = bData["ymin"], bData["ymax"] do -- draws a rectangle
+		display.setCursorPos(bData["xmin"], j)
+		for i = bData["xmin"], bData["xmax"] do
+			display.write(" ")
+		end
+	end
+	if on == "x" then -- draws a cross on top
+		local xOffset = 0
+		local scaledYOffset = 0
+		display.setBackgroundColor(colors.red)
+		for j = bData["ymin"], bData["ymax"] do
+			scaledYOffset = (j - bData["ymin"]) * sizeRel
+			for i = bData["xmin"], bData["xmax"] do
+				xOffset = i - bData["xmin"]
+				if (math.floor(math.abs(xOffset - scaledYOffset)-2.2) < 0) or (math.floor(math.abs(xOffset + scaledYOffset - xSize)-2.2) < 0) then
+					display.setCursorPos(i, j)
+					display.write(" ")
+				end
+			end
+		end
+	elseif on == "o" then -- draws a circle on top
+		local xOffset = 0
+		local scaledYOffset = 0
+		local halfSize = xSize / 2
+		display.setBackgroundColor(colors.red)
+		for j = bData["ymin"], bData["ymax"] do
+			scaledYOffset = math.abs(halfSize - ((j - bData["ymin"]) * sizeRel))
+			for i = bData["xmin"], bData["xmax"] do
+				xOffset = math.abs(halfSize - (i - bData["xmin"]))
+				if math.floor(math.abs(math.sqrt(scaledYOffset^2+xOffset^2) - halfSize)-1.9) < 0 then
+					display.setCursorPos(i, j)
+					display.write(" ")
+				end
+			end
+		end
+	end
+	display.setBackgroundColor(colors.black)
+end
+
+function screen()
+	local currColor
+	local currDisplayName
+	for name,data in pairs(button) do
+		local on = data["player"]
+		if on == "empty" then
+			currDisplayName = " "
+		elseif on == "x" then
+			currDisplayName = on
+		elseif on == "o" then
+			currDisplayName = on
+		end
+		if data["active"] then
+			currColor = colors.lime
+		else
+			if on == "empty" then
+				currColor = colors.white
+			elseif on == "x" then
+				currColor = colors.lightGray
+			elseif on == "o" then
+				currColor = colors.lightGray
+			end
+		end
+		fill(currDisplayName, currColor, data)
+	end
+end
+
+function toggleButton(name)
+	button[name]["active"] = not button[name]["active"]
+	screen()
+end     
+
+function flash(name)
+	toggleButton(name)
+	screen()
+	sleep(0.15)
+	toggleButton(name)
+	screen()
+end
+
+function checkxy(x, y, side)
+	for name, data in pairs(button) do
+		if data["mon"] == side then
+			if y>=data["ymin"] and  y <= data["ymax"] then
+				if x>=data["xmin"] and x<= data["xmax"] then
+					if data["param"] == "" then
+						data["func"]()
+					else
+						data["func"](data["param"])
+					end
+					return true
+					--data["active"] = not data["active"]
+					--print(name)
+				end
+			end
+		end
+	end
+	return false
+end
+
+function heading(text, monSide)
+	if not testForMonitor(monSide) then
+		print("Heading cannot be displayed on "..monSide..".")
+		return
+	end
+	local display = monitors[bData["mon"]]
+	w, h = display.getSize()
+	display.setCursorPos((w-string.len(text))/2+1, 1)
+	display.write(text)
+end
+
+function label(w, h, text, monSide)
+	if not testForMonitor(monSide) then
+		print("Heading cannot be displayed on "..monSide..".")
+		return
+	end
+	local display = monitors[bData["mon"]]
+	display.setCursorPos(w, h)
+	display.write(text)
+end

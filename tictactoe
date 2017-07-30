@@ -1,0 +1,191 @@
+os.loadAPI("button")
+local mainMonitor = "top"
+GamePanel = peripheral.wrap(mainMonitor)
+GamePanel.clear()
+ControlPanel = peripheral.wrap("right")
+
+function writeMessage(message, monitor)
+	local xc, yc = ControlPanel.getSize()
+	ControlPanel.clear()
+	ControlPanel.setCursorPos(math.floor((xc - string.len(message))/2+1),yc/2 + 1)
+	ControlPanel.write(message)
+end
+
+local xo, yo = GamePanel.getSize()
+print("Width: "..xo)
+print("Height: "..yo)
+local width = math.floor((xo-2)/3)
+local height = math.floor((yo-2)/3)
+print("Box width: "..width)
+print("Box height: "..height)
+
+function getEnemy(pPlayer)
+	if pPlayer == "x" then
+		return "o"
+	elseif pPlayer == "o" then
+		return "x"
+	else
+		print("Player \""..pPlayer.."\" has no opponent! (returning nil)")
+		return nil
+	end
+end
+
+activePlayer = "x"
+nextGameActivePlayer = getEnemy(activePlayer)
+winner = "empty"
+
+function newGame()
+	winner = "empty"
+	clearAll()
+	fillTable()
+	activePlayer = nextGameActivePlayer
+	nextGameActivePlayer = getEnemy(nextGameActivePlayer)
+end
+
+function getPlayerTable()
+	local tbl = {}
+	for x = 0,2 do
+		tbl[x] = {}
+		for y = 0,2 do
+			tbl[x][y] = button.getPlayer(x..y)
+		end
+	end
+	return tbl
+end
+
+function checkGameOver()
+	local p1 = "x"
+	local p2 = "o"
+	local p3 = "empty"
+	
+	--Get player information
+	local tbl = getPlayerTable()
+	
+	--Check draw
+	local countNotEmpty = 0
+	for x = 0,2 do
+		for y = 0,2 do
+			if tbl[x][y] ~= p3 then
+				countNotEmpty = countNotEmpty + 1
+			end
+		end
+	end
+	if countNotEmpty == 9 then
+		return true, p3, {}
+	end
+	
+	-- Check win
+	local countColumns = {[p1] = 0, [p2] = 0}
+	local countRows = {[p1] = 0, [p2] = 0}
+	local countDiagonal1 = {[p1] = 0, [p2] = 0}
+	local countDiagonal2 = {[p1] = 0, [p2] = 0}
+	
+	for a = 0,2 do
+		countColumns = {[p1] = 0, [p2] = 0}
+		countRows = {[p1] = 0, [p2] = 0}
+		for b = 0,2 do
+			if tbl[a][b] ~= p3 then
+				countColumns[tbl[a][b]] = countColumns[tbl[a][b]] + 1
+			end
+			if tbl[b][a] ~= p3 then
+				countRows[tbl[b][a]] = countRows[tbl[b][a]] + 1
+			end
+		end
+		
+		if tbl[a][a] ~= p3 then
+			countDiagonal1[tbl[a][a]] = countDiagonal1[tbl[a][a]] + 1
+		end
+		if tbl[a][2 - a] ~= p3 then
+			countDiagonal2[tbl[a][2 - a]] = countDiagonal2[tbl[a][2 - a]] + 1
+		end
+		
+		if countColumns[p1] == 3 then
+			return true, p1, {{["x"] = a, ["y"] = 0},{["x"] = a, ["y"] = 1},{["x"] = a, ["y"] = 2}}
+		elseif  countColumns[p2] == 3 then
+			return true, p2, {{["x"] = a, ["y"] = 0},{["x"] = a, ["y"] = 1},{["x"] = a, ["y"] = 2}}
+		end
+		if countRows[p1] == 3 then
+			return true, p1, {{["x"] = 0, ["y"] = a},{["x"] = 1, ["y"] = a},{["x"] = 2, ["y"] = a}}
+		elseif  countRows[p2] == 3 then
+			return true, p2, {{["x"] = 0, ["y"] = a},{["x"] = 1, ["y"] = a},{["x"] = 2, ["y"] = a}}
+		end
+	end
+	
+	if countDiagonal1[p1] == 3 then
+		return true, p1, {{["x"] = 0, ["y"] = 0},{["x"] = 1, ["y"] = 1},{["x"] = 2, ["y"] = 2}}
+	elseif  countDiagonal1[p2] == 3 then
+		return true, p2, {{["x"] = 0, ["y"] = 0},{["x"] = 1, ["y"] = 1},{["x"] = 2, ["y"] = 2}}
+	end
+	if countDiagonal2[p1] == 3 then
+		return true, p1, {{["x"] = 0, ["y"] = 2},{["x"] = 1, ["y"] = 1},{["x"] = 2, ["y"] = 0}}
+	elseif  countDiagonal2[p2] == 3 then
+		return true, p2, {{["x"] = 0, ["y"] = 2},{["x"] = 1, ["y"] = 1},{["x"] = 2, ["y"] = 0}}
+	end
+	
+	return false, p3, {}
+end
+
+function getPlayerName(pPlayer)
+	if pPlayer == "x" then
+		return "Cross"
+	elseif pPlayer == "o" then
+		return "Circle"
+	elseif pPlayer == "empty" then
+		print("Player \"empty\" has no name! (returning \"empty\")")
+		return "empty"
+	else
+		print("Player \""..pPlayer.."\" has is invalid! (returning nil)")
+		return nil
+	end
+end
+
+function fx(params)
+	local x = params["x"]
+	local y = params["y"]
+	print("Field at "..x..","..y.." was clicked")
+	if button.getPlayer(x..y) == "empty" then
+		print(getPlayerName(activePlayer).." occupied the field at "..x..","..y..".")
+		button.setPlayer(x..y, activePlayer)
+		activePlayer = getEnemy(activePlayer)
+		local gameOver, winner, wInformation = checkGameOver()
+		if gameOver then
+			print("Game over: "..getPlayerName(winner).." has won.")
+			for a,b in pairs(wInformation) do
+				button.setState(b["x"]..b["y"], true)
+			end
+			if winner == "empty" then
+				writeMessage("Draw! Try again...")
+			else
+				writeMessage(getPlayerName(winner).." has won!", ControlPanel)
+			end
+		else
+			writeMessage(getPlayerName(activePlayer).."\'s turn!", ControlPanel)
+		end
+	else
+		print(getPlayerName(activePlayer).." cannot occupy the field at "..x..","..y..". It is already occupied by "..getPlayerName(button.getPlayer(x..y))..".")
+	end
+end
+
+function fillTable()
+	for x = 0,2 do
+		for y = 0,2 do
+		 --	local pos = fieldIndex * FieldWidth + borderIndex * borderWidth(=1) + monitorIndex (0,1,2,3 -> 1,2,3,4)
+			local xPos = x * width + x + 1
+			local yPos = y * height + y + 1
+			print("Drawing button "..x..","..y.." at "..xPos..","..yPos.." to the monitor on the top...")
+			button.setTable(x..y, fx, {["x"] = x, ["y"] = y}, xPos, xPos + width - 1, yPos, yPos + height - 1, "top")
+		end
+	end
+	button.screen()
+end
+
+function getClick()
+	event,side,x,y = os.pullEvent("monitor_touch")
+	button.checkxy(x, y, side)
+end
+
+fillTable()
+
+while true do
+	getClick()
+end
